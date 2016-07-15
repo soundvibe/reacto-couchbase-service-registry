@@ -22,6 +22,8 @@ import com.couchbase.client.java.document.AbstractDocument;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+import com.couchbase.client.java.error.TemporaryFailureException;
+import com.couchbase.client.java.error.TemporaryLockFailureException;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -29,8 +31,11 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.spi.ServiceDiscoveryBackend;
+import rx.*;
+import rx.Observable;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -51,15 +56,19 @@ public class CouchbaseBackendService implements ServiceDiscoveryBackend {
     @SuppressWarnings("unchecked")
     @Override
     public void init(Vertx vertx, JsonObject configuration) {
-        key = configuration.getString("key", "service-discovery");
-        final List<Object> nodes = configuration.getJsonArray("nodes").getList();
-        final CouchbaseCluster cluster = CouchbaseCluster.create(couchbaseEnvironment,
-                nodes.stream()
+        key = configuration.getString("key", "service-discovery-records");
+        final List<String> nodes = Optional.ofNullable(configuration.getJsonArray("nodes"))
+                .map(jsonArray -> jsonArray.stream()
                         .filter(o -> o instanceof String)
-                        .map(o -> (String)o)
-                        .collect(Collectors.toList())
-        );
-        couchbase = cluster.openBucket(configuration.getString("bucketName"), configuration.getString("pwd"));
+                        .map(o -> (String) o)
+                        .collect(Collectors.toList()))
+                .orElseThrow(() -> new IllegalArgumentException("Couchbase 'nodes' (JsonArray) are not present in backend configuration"));
+        final CouchbaseCluster cluster = CouchbaseCluster.create(couchbaseEnvironment, nodes);
+        couchbase = cluster.openBucket(
+                Optional.ofNullable(configuration.getString("bucketName"))
+                        .orElseThrow(() -> new IllegalArgumentException("Couchbase 'bucketName' is missing in backend configuration"))
+                , Optional.ofNullable(configuration.getString("pwd"))
+                        .orElseThrow(() -> new IllegalArgumentException("Couchbase 'pwd' is missing in backend configuration")));
     }
 
     @Override
@@ -68,105 +77,97 @@ public class CouchbaseBackendService implements ServiceDiscoveryBackend {
             resultHandler.handle(Future.failedFuture("The record has already been registered"));
             return;
         }
-        String uuid = UUID.randomUUID().toString();
+        final String uuid = UUID.randomUUID().toString();
         record.setRegistration(uuid);
-
-        try {
-            final JsonDocument map = getMap().orElseGet(() -> JsonDocument.create(key));
-            map.content().put(uuid, com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode()));
-
-            couchbase.async().upsert(map)
-                    .subscribe(
-                            rawJsonDocument -> resultHandler.handle(Future.succeededFuture(record)),
-                            throwable -> resultHandler.handle(Future.failedFuture(throwable))
-                    );
-        } catch (Throwable e) {
-            resultHandler.handle(Future.failedFuture(e));
-        }
+        getAndLock()
+                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getAndLock()))
+                .retry((count, e) -> (count < 10) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
+                .defaultIfEmpty(JsonDocument.create(key, com.couchbase.client.java.document.json.JsonObject.create()))
+                .doOnNext(jsonDocument -> jsonDocument.content().put(uuid, com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode())))
+                .flatMap(jsonDocument -> {
+                    if (jsonDocument.cas() != 0L) {
+                        return couchbase.async().replace(jsonDocument);
+                    } else {
+                        return couchbase.async().insert(jsonDocument);
+                    }
+                })
+                .subscribe(
+                    rawJsonDocument -> resultHandler.handle(Future.succeededFuture(record)),
+                    throwable -> resultHandler.handle(Future.failedFuture(throwable))
+        );
     }
 
-    private Optional<JsonDocument> getMap() {
-        return Optional.ofNullable(couchbase.get(key));
+    private Observable<JsonDocument> getAndLock() {
+        return couchbase.async().get(key);
     }
-
 
     @Override
     public void remove(Record record, Handler<AsyncResult<Record>> resultHandler) {
-        Objects.requireNonNull(record.getRegistration(), "No registration id in the record");
+        Objects.requireNonNull(record, "No record");
         remove(record.getRegistration(), resultHandler);
     }
 
     @Override
     public void remove(String uuid, Handler<AsyncResult<Record>> resultHandler) {
         Objects.requireNonNull(uuid, "No registration id in the record");
-        try {
-            getMap().ifPresent(jsonDocument -> {
-                jsonDocument.content().removeKey(uuid);
-                couchbase.async().replace(jsonDocument)
-                        .subscribe(
-                                doc -> resultHandler.handle(Future.succeededFuture(
-                                        new Record(new JsonObject(doc.content().toString())))),
-                                throwable -> resultHandler.handle(Future.failedFuture(throwable))
-                        );
-            });
-        } catch (Throwable e) {
-            resultHandler.handle(Future.failedFuture(e));
-        }
+        getAndLock()
+                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getAndLock()))
+                .retry((count, e) -> (count < 10) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
+                .doOnNext(jsonDocument -> jsonDocument.content().removeKey(uuid))
+                //.doOnNext(jsonDocument -> couchbase.unlock(jsonDocument.id(), jsonDocument.cas()))
+                .map(jsonDocument -> couchbase.replace(jsonDocument))
+                .subscribe(doc -> resultHandler.handle(Future.succeededFuture(
+                        new Record(new JsonObject(doc.content().toString())))),
+                        throwable -> resultHandler.handle(Future.failedFuture(throwable)));
+
     }
 
     @Override
     public void update(Record record, Handler<AsyncResult<Void>> resultHandler) {
         Objects.requireNonNull(record.getRegistration(), "No registration id in the record");
-        try {
-            getMap().ifPresent(jsonDocument -> {
-                jsonDocument.content().put(record.getRegistration(), com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode()));
-                couchbase.async().replace(jsonDocument)
-                        .subscribe(
-                                rawJsonDocument -> resultHandler.handle(Future.succeededFuture()),
-                                throwable -> resultHandler.handle(Future.failedFuture(throwable))
-                        );
-            });
-        } catch (Throwable e) {
-            resultHandler.handle(Future.failedFuture(e));
-        }
+        getAndLock()
+                .retry((count, e) -> (count < 100) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
+                .doOnNext(jsonDocument -> jsonDocument.content()
+                        .put(record.getRegistration(), com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode())))
+                //.doOnNext(jsonDocument -> couchbase.unlock(jsonDocument.id(), jsonDocument.cas()))
+                .flatMap(jsonDocument -> couchbase.async().replace(jsonDocument))
+                .subscribe(jsonDocument -> resultHandler.handle(Future.succeededFuture()),
+                        throwable -> resultHandler.handle(Future.failedFuture(throwable)));
     }
 
     @Override
     public void getRecords(Handler<AsyncResult<List<Record>>> resultHandler) {
-        try {
-            final com.couchbase.client.java.document.json.JsonObject jsonObject = getMap()
-                    .map(AbstractDocument::content)
-                    .orElseGet(com.couchbase.client.java.document.json.JsonObject::create);
-            final Map<String, Object> fields = jsonObject.toMap();
+        couchbase.async().get(key)
+                .retry((count, e) -> (count < 100) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
+                .map(AbstractDocument::content)
+                .flatMap(jsonObject -> {
+                    final Map<String, Object> fields = jsonObject.toMap();
+                    return rx.Observable.just(fields.keySet().stream()
+                            .map(key -> new Record(new JsonObject(jsonObject.getObject(key).toString())))
+                            .collect(Collectors.toList()));
 
-            final List<Record> records = fields.keySet().stream()
-                    .map(key -> new Record(new JsonObject(jsonObject.getObject(key).toString())))
-                    .collect(Collectors.toList());
-
-            resultHandler.handle(Future.succeededFuture(records));
-        } catch (Throwable e) {
-            resultHandler.handle(Future.failedFuture(e));
-        }
+                })
+                .subscribe(
+                        records -> resultHandler.handle(Future.succeededFuture(records)),
+                        throwable -> resultHandler.handle(Future.failedFuture(throwable))
+                );
     }
 
     @Override
     public void getRecord(String uuid, Handler<AsyncResult<Record>> resultHandler) {
-        try {
-            final Optional<JsonDocument> map = getMap();
-            if (!map.isPresent()) {
-                resultHandler.handle(Future.failedFuture("Records are not present."));
-                return;
-            }
-
-            final com.couchbase.client.java.document.json.JsonObject object = map.get().content().getObject(uuid);
-            if (object == null) {
-                resultHandler.handle(Future.succeededFuture(null));
-                return;
-            }
-
-            resultHandler.handle(Future.succeededFuture(new Record(new JsonObject(object.toString()))));
-        } catch (Throwable e) {
-            resultHandler.handle(Future.failedFuture(e));
-        }
+        couchbase.async().get(key)
+                .retry((count, e) -> (count < 100) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
+                .map(AbstractDocument::content)
+                .map(jsonObject -> jsonObject.getObject(uuid))
+                .subscribe(
+                        jsonObject -> {
+                            if (jsonObject == null) {
+                                resultHandler.handle(Future.succeededFuture(null));
+                            } else {
+                                resultHandler.handle(Future.succeededFuture(new Record(new JsonObject(jsonObject.toString()))));
+                            }
+                        },
+                        throwable -> resultHandler.handle(Future.failedFuture(throwable))
+                );
     }
 }
