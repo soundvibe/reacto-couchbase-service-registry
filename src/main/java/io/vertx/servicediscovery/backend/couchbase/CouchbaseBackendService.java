@@ -48,10 +48,17 @@ public class CouchbaseBackendService implements ServiceDiscoveryBackend {
     private Bucket couchbase;
     private String key;
 
+    @SuppressWarnings("unchecked")
     @Override
     public void init(Vertx vertx, JsonObject configuration) {
         key = configuration.getString("key", "service-discovery");
-        final CouchbaseCluster cluster = CouchbaseCluster.create(couchbaseEnvironment, configuration.getJsonArray("nodes").getList());
+        final List<Object> nodes = configuration.getJsonArray("nodes").getList();
+        final CouchbaseCluster cluster = CouchbaseCluster.create(couchbaseEnvironment,
+                nodes.stream()
+                        .filter(o -> o instanceof String)
+                        .map(o -> (String)o)
+                        .collect(Collectors.toList())
+        );
         couchbase = cluster.openBucket(configuration.getString("bucketName"), configuration.getString("pwd"));
     }
 
