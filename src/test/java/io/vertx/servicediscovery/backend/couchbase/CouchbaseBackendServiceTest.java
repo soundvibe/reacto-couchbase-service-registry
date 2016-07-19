@@ -8,6 +8,7 @@ import io.vertx.servicediscovery.ServiceDiscovery;
 import io.vertx.servicediscovery.ServiceDiscoveryOptions;
 import io.vertx.servicediscovery.ServiceReference;
 import io.vertx.servicediscovery.types.HttpEndpoint;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -22,15 +23,16 @@ import static org.junit.Assert.*;
 public class CouchbaseBackendServiceTest {
 
     @Test
+    @Ignore
     public void shouldPublish() throws Exception {
         final Vertx vertx = Vertx.vertx();
 
         final ServiceDiscovery serviceDiscovery = ServiceDiscovery.create(vertx,
                 new ServiceDiscoveryOptions()
                     .setBackendConfiguration(new JsonObject()
-                        .put("nodes", new JsonArray().add("******"))
+                        .put("nodes", new JsonArray().add("**"))
                             .put("bucketName", "***")
-                            .put("pwd", "******")
+                            .put("pwd", "****")
                     )
         );
 

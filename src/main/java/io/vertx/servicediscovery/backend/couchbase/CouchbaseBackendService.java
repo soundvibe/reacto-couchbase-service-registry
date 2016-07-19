@@ -22,6 +22,7 @@ import com.couchbase.client.java.document.AbstractDocument;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+import com.couchbase.client.java.error.CASMismatchException;
 import com.couchbase.client.java.error.TemporaryFailureException;
 import com.couchbase.client.java.error.TemporaryLockFailureException;
 import io.vertx.core.AsyncResult;
@@ -31,7 +32,6 @@ import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.servicediscovery.Record;
 import io.vertx.servicediscovery.spi.ServiceDiscoveryBackend;
-import rx.*;
 import rx.Observable;
 
 import java.util.*;
@@ -79,25 +79,27 @@ public class CouchbaseBackendService implements ServiceDiscoveryBackend {
         }
         final String uuid = UUID.randomUUID().toString();
         record.setRegistration(uuid);
-        getAndLock()
-                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getAndLock()))
+
+        getRoot()
+                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getRoot()))
                 .retry((count, e) -> (count < 10) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
                 .defaultIfEmpty(JsonDocument.create(key, com.couchbase.client.java.document.json.JsonObject.create()))
                 .doOnNext(jsonDocument -> jsonDocument.content().put(uuid, com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode())))
-                .flatMap(jsonDocument -> {
-                    if (jsonDocument.cas() != 0L) {
-                        return couchbase.async().replace(jsonDocument);
-                    } else {
-                        return couchbase.async().insert(jsonDocument);
-                    }
-                })
+                .flatMap(jsonDocument -> couchbase.async().upsert(jsonDocument))
                 .subscribe(
                     rawJsonDocument -> resultHandler.handle(Future.succeededFuture(record)),
-                    throwable -> resultHandler.handle(Future.failedFuture(throwable))
+                        throwable -> {
+                            if (throwable instanceof CASMismatchException) {
+                                store(record, resultHandler); //document has been changed since last read, try again
+                            } else {
+                                resultHandler.handle(Future.failedFuture(throwable));
+                            }
+
+                        }
         );
     }
 
-    private Observable<JsonDocument> getAndLock() {
+    private Observable<JsonDocument> getRoot() {
         return couchbase.async().get(key);
     }
 
@@ -110,29 +112,40 @@ public class CouchbaseBackendService implements ServiceDiscoveryBackend {
     @Override
     public void remove(String uuid, Handler<AsyncResult<Record>> resultHandler) {
         Objects.requireNonNull(uuid, "No registration id in the record");
-        getAndLock()
-                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getAndLock()))
+        getRoot()
+                .onExceptionResumeNext(Observable.timer(100L, TimeUnit.MILLISECONDS).flatMap(aLong -> getRoot()))
                 .retry((count, e) -> (count < 10) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
                 .doOnNext(jsonDocument -> jsonDocument.content().removeKey(uuid))
-                //.doOnNext(jsonDocument -> couchbase.unlock(jsonDocument.id(), jsonDocument.cas()))
                 .map(jsonDocument -> couchbase.replace(jsonDocument))
                 .subscribe(doc -> resultHandler.handle(Future.succeededFuture(
                         new Record(new JsonObject(doc.content().toString())))),
-                        throwable -> resultHandler.handle(Future.failedFuture(throwable)));
+                        throwable -> {
+                            if (throwable instanceof CASMismatchException) {
+                                remove(uuid, resultHandler); //document has been changed since last read, try again
+                            } else {
+                                resultHandler.handle(Future.failedFuture(throwable));
+                            }
+                        }
+                );
 
     }
 
     @Override
     public void update(Record record, Handler<AsyncResult<Void>> resultHandler) {
         Objects.requireNonNull(record.getRegistration(), "No registration id in the record");
-        getAndLock()
+        getRoot()
                 .retry((count, e) -> (count < 100) && (e instanceof TemporaryFailureException || e instanceof TemporaryLockFailureException))
                 .doOnNext(jsonDocument -> jsonDocument.content()
                         .put(record.getRegistration(), com.couchbase.client.java.document.json.JsonObject.fromJson(record.toJson().encode())))
-                //.doOnNext(jsonDocument -> couchbase.unlock(jsonDocument.id(), jsonDocument.cas()))
                 .flatMap(jsonDocument -> couchbase.async().replace(jsonDocument))
                 .subscribe(jsonDocument -> resultHandler.handle(Future.succeededFuture()),
-                        throwable -> resultHandler.handle(Future.failedFuture(throwable)));
+                        throwable -> {
+                            if (throwable instanceof CASMismatchException) {
+                                update(record, resultHandler); //document has been changed since last read, try again
+                            } else {
+                                resultHandler.handle(Future.failedFuture(throwable));
+                            }
+                        });
     }
 
     @Override
