@@ -213,6 +213,14 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
                 .filter(rec -> !isOpen.get())
                 .flatMap(rec -> publish())
                 .doOnNext(any -> startHeartBeat())
+                .doOnNext(any -> Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    log.info("Executing shutdown hook...");
+                    unregister()
+                            .subscribe(
+                                    __ -> log.info("Service was successfully unregistered before shutting down"),
+                                    error -> log.error("Service was unable to unregister before shutting down: " + error)
+                            );
+                })))
                 .doOnNext(any -> isOpen.set(true));
     }
 
