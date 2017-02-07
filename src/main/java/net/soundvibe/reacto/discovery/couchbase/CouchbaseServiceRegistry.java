@@ -59,8 +59,7 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
                     net.soundvibe.reacto.types.json.JsonObject.empty(),
                     net.soundvibe.reacto.types.json.JsonObject.empty());
 
-    public static final long DEFAULT_HEARTBEAT_INTERVAL_IN_MILLIS = TimeUnit.SECONDS.toMillis(60);
-    public static final int DEFAULT_EXPIRATION_TIME_IN_SECONDS = 90;
+    public static final int DEFAULT_HEARTBEAT_INTERVAL_IN_SECONDS = 60;
 
     public static final ObjectMapper json = new ObjectMapper();
 
@@ -70,12 +69,16 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
     private final AtomicBoolean isOpen = new AtomicBoolean(false);
     private final AtomicReference<Timer> timer = new AtomicReference<>();
     private final JsonObject serviceObject;
+    private final int heartBeatIntervalInSeconds;
+    private final MutationOptionBuilder builder;
 
     public CouchbaseServiceRegistry(
             Supplier<Bucket> bucketSupplier,
             EventHandlerRegistry eventHandlerRegistry,
             ServiceRegistryMapper mapper) {
-        this(bucketSupplier, DEFAULT_RECORDS_KEY, eventHandlerRegistry, mapper, DEFAULT_SERVICE_RECORD);
+        this(bucketSupplier, DEFAULT_RECORDS_KEY, eventHandlerRegistry, mapper,
+                DEFAULT_SERVICE_RECORD,
+                DEFAULT_HEARTBEAT_INTERVAL_IN_SECONDS);
     }
 
     public CouchbaseServiceRegistry(
@@ -83,7 +86,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
             String recordsKey,
             EventHandlerRegistry eventHandlerRegistry,
             ServiceRegistryMapper mapper,
-            ServiceRecord serviceRecord) {
+            ServiceRecord serviceRecord,
+            int heartBeatIntervalInSeconds) {
         super(eventHandlerRegistry, mapper);
         requireNonNull(bucketSupplier, "bucketSupplier cannot be null");
         requireNonNull(recordsKey, "recordsKey cannot be null");
@@ -92,6 +96,11 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
         this.recordsKey = recordsKey;
         this.serviceRecord = serviceRecord;
         this.serviceObject = toCouchbaseObject(serviceRecord);
+        this.heartBeatIntervalInSeconds = heartBeatIntervalInSeconds;
+        this.builder = MutationOptionBuilder.builder()
+                .createDocument(true)
+                .expiry((int) (heartBeatIntervalInSeconds * 1.5))
+        ;
     }
 
     static {
@@ -167,11 +176,6 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
                 );
     }
 
-    private static final MutationOptionBuilder builder = MutationOptionBuilder.builder()
-            .createDocument(true)
-            .expiry(DEFAULT_EXPIRATION_TIME_IN_SECONDS)
-            ;
-
     @Override
     public Observable<Any> unpublish(ServiceRecord serviceRecord) {
         return bucketSupplier.get().async()
@@ -193,7 +197,7 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
     }
 
     private void startHeartBeat() {
-        timer.set(Scheduler.scheduleAtFixedInterval(DEFAULT_HEARTBEAT_INTERVAL_IN_MILLIS,
+        timer.set(Scheduler.scheduleAtFixedInterval(TimeUnit.SECONDS.toMillis(heartBeatIntervalInSeconds),
                 () -> Observable.just(serviceRecord)
                         .filter(rec -> isOpen.get())
                         .flatMap(rec -> publish())
