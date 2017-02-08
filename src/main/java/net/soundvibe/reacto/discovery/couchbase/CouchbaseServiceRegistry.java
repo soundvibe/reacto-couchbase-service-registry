@@ -171,12 +171,12 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
         return getStatus(serviceRecordObject) == Status.UP &&
                 ofNullable(serviceRecordObject.getObject(METADATA))
                     .map(metadata -> metadata.getArray(ServiceRecord.METADATA_COMMANDS))
-                    .filter(commands -> StreamSupport.stream(commands.spliterator(), false)
+                    .map(commands -> StreamSupport.stream(commands.spliterator(), false)
                             .filter(o -> o instanceof JsonObject)
                             .map(o -> (JsonObject)o)
                             .anyMatch(jsonObject -> command.name.equals(jsonObject.getString(COMMAND))
                                 && command.eventType().equals(jsonObject.getString(EVENT))))
-                    .isPresent();
+                    .orElse(false);
     }
 
     private static Status getStatus(JsonObject jsonObject) {
