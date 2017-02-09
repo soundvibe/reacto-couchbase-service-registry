@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author Linas Naginionis
  */
-public final class CouchbaseServiceRegistry extends AbstractServiceRegistry implements ServiceDiscoveryLifecycle {
+public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
 
     private final static Logger log = LoggerFactory.getLogger(CouchbaseServiceRegistry.class);
 
