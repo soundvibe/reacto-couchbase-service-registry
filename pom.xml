@@ -30,7 +30,6 @@
   <properties>
     <java.version>1.8</java.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <jackson.version>2.8.5</jackson.version>
   </properties>
 
     <distributionManagement>
@@ -50,7 +49,7 @@
       <dependency>
           <groupId>net.soundvibe</groupId>
           <artifactId>reacto</artifactId>
-          <version>1.0.0-SNAPSHOT</version>
+          <version>1.0.0</version>
       </dependency>
 
       <dependency>
