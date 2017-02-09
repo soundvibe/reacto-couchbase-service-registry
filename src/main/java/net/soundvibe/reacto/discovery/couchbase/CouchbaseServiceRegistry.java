@@ -21,12 +21,10 @@ import com.couchbase.client.java.document.*;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.couchbase.client.java.error.*;
 import com.couchbase.client.java.view.*;
-import com.fasterxml.jackson.databind.*;
 import net.soundvibe.reacto.client.events.EventHandlerRegistry;
 import net.soundvibe.reacto.discovery.*;
 import net.soundvibe.reacto.discovery.types.*;
 import net.soundvibe.reacto.mappers.ServiceRegistryMapper;
-import net.soundvibe.reacto.mappers.jackson.JacksonMapper;
 import net.soundvibe.reacto.types.*;
 import net.soundvibe.reacto.utils.Scheduler;
 import org.slf4j.*;
@@ -36,13 +34,9 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.*;
 import java.util.function.Supplier;
-import java.util.stream.*;
 
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
+import static java.util.Collections.*;
 import static java.util.Objects.requireNonNull;
-import static java.util.Optional.ofNullable;
-import static net.soundvibe.reacto.types.CommandDescriptor.*;
 
 /**
  * An implementation of the reacto service registry based on Couchbase.
@@ -61,15 +55,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
 
     public static final int DEFAULT_HEARTBEAT_INTERVAL_IN_SECONDS = 60;
 
-    public static final ObjectMapper json = new ObjectMapper();
     public static final String METADATA = "metadata";
-    public static final String NAME = "name";
     public static final String STATUS = "status";
-    public static final String TYPE = "type";
-    public static final String REGISTRATION = "registration";
-    public static final String LOCATION = "location";
-    public static final String OBJECT_TYPE = "objectType";
-    public static final String REACTO_SERVICE_REGISTRY = "reacto-service-registry";
 
     private final Supplier<Bucket> bucketSupplier;
     private final ViewQuery viewQuery;
@@ -110,20 +97,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
         this.heartBeatIntervalInSeconds = heartBeatIntervalInSeconds;
     }
 
-    static {
-        json.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-        json.registerModule(JacksonMapper.jsonTypesModule());
-    }
-
     public static JsonObject toCouchbaseObject(ServiceRecord serviceRecord) {
-        return JsonObject.create()
-                .put(NAME, serviceRecord.name)
-                .put(STATUS, serviceRecord.status.name())
-                .put(TYPE, serviceRecord.type.name())
-                .put(REGISTRATION, serviceRecord.registrationId)
-                .put(OBJECT_TYPE, REACTO_SERVICE_REGISTRY)
-                .put(LOCATION, JsonObject.fromJson(serviceRecord.location.encode(json::writeValueAsString)))
-                .put(METADATA, JsonObject.fromJson(serviceRecord.metaData.encode(json::writeValueAsString)));
+        return JsonObject.fromJson(serviceRecord.toJson());
     }
 
     private final static String viewMapFunction = "function (doc, meta) {\n" +
@@ -146,16 +121,20 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
                 .flatMap(doc -> bucketSupplier.get().bucketManager().async().publishDesignDocument(designDocument, true));
     }
 
-    @Override
-    protected Observable<List<ServiceRecord>> findRecordsOf(Command command) {
+    public Observable<ServiceRecord> findRecords() {
         return bucketSupplier.get().async()
                 .query(viewQuery)
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .flatMap(AsyncViewResult::rows)
                 .flatMap(AsyncViewRow::document)
                 .map(AbstractDocument::content)
-                .filter(jsonObject -> isCompatibleWith(command, jsonObject))
-                .map(CouchbaseServiceRegistry::toRecord)
+                .map(CouchbaseServiceRegistry::toRecord);
+    }
+
+    @Override
+    protected Observable<List<ServiceRecord>> findRecordsOf(Command command) {
+        return findRecords()
+                .filter(serviceRecord -> serviceRecord.isCompatibleWith(command))
                 .toList()
                 .defaultIfEmpty(emptyList());
     }
@@ -167,41 +146,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
         );
     }
 
-    public static boolean isCompatibleWith(Command command, JsonObject serviceRecordObject) {
-        return getStatus(serviceRecordObject) == Status.UP &&
-                ofNullable(serviceRecordObject.getObject(METADATA))
-                    .map(metadata -> metadata.getArray(ServiceRecord.METADATA_COMMANDS))
-                    .map(commands -> StreamSupport.stream(commands.spliterator(), false)
-                            .filter(o -> o instanceof JsonObject)
-                            .map(o -> (JsonObject)o)
-                            .anyMatch(jsonObject -> command.name.equals(jsonObject.getString(COMMAND))
-                                && command.eventType().equals(jsonObject.getString(EVENT))))
-                    .orElse(false);
-    }
-
-    private static Status getStatus(JsonObject jsonObject) {
-        return ofNullable(jsonObject.getString(STATUS))
-                .map(Status::valueOf)
-                .orElse(Status.UNKNOWN);
-    }
-
     public static ServiceRecord toRecord(JsonObject jsonObject) {
-        return ServiceRecord.create(
-                jsonObject.getString(NAME),
-                getStatus(jsonObject),
-                ofNullable(jsonObject.getString(TYPE))
-                        .map(ServiceType::valueOf)
-                        .orElse(ServiceType.LOCAL),
-                jsonObject.getString(REGISTRATION),
-                ofNullable(jsonObject.getObject(LOCATION))
-                    .map(JsonObject::toMap)
-                    .map(net.soundvibe.reacto.types.json.JsonObject::new)
-                    .orElseThrow(() -> new IllegalStateException("Location is missing from service record: " + jsonObject.toString())),
-                ofNullable(jsonObject.getObject(METADATA))
-                    .map(JsonObject::toMap)
-                    .map(net.soundvibe.reacto.types.json.JsonObject::new)
-                    .orElseGet(net.soundvibe.reacto.types.json.JsonObject::empty)
-                );
+        return ServiceRecord.fromJson(jsonObject.toString());
     }
 
     public Observable<Any> unpublish(ServiceRecord serviceRecord) {

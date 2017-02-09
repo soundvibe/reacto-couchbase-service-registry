@@ -8,7 +8,6 @@ import net.soundvibe.reacto.types.*;
 import org.junit.Test;
 import rx.Observable;
 
-import static net.soundvibe.reacto.discovery.couchbase.CouchbaseServiceRegistry.json;
 import static org.junit.Assert.*;
 
 /**
@@ -18,7 +17,7 @@ public class CouchbaseServiceRegistryTest {
 
     private final ServiceRecord typedRecord = ServiceRecord.createWebSocketEndpoint(
             new ServiceOptions("service", "/", "1", false, 8181),
-            CommandRegistry.ofTyped(String.class, String.class, Observable::just, new JacksonMapper(json)));
+            CommandRegistry.ofTyped(String.class, String.class, Observable::just, new JacksonMapper(JacksonMapper.JSON)));
 
     private final ServiceRecord untypedRecord = ServiceRecord.createWebSocketEndpoint(
             new ServiceOptions("service", "/", "1", false, 8181),
@@ -42,16 +41,10 @@ public class CouchbaseServiceRegistryTest {
 
     @Test
     public void shouldBeCompatibleWith() throws Exception {
-        assertFalse(CouchbaseServiceRegistry.isCompatibleWith(
-                Command.create("foo"),
-                CouchbaseServiceRegistry.toCouchbaseObject(typedRecord)));
+        assertFalse(typedRecord.isCompatibleWith(Command.create("foo")));
 
-        assertTrue(CouchbaseServiceRegistry.isCompatibleWith(
-                Command.create("foo"),
-                CouchbaseServiceRegistry.toCouchbaseObject(untypedRecord)));
+        assertTrue(untypedRecord.isCompatibleWith(Command.create("foo")));
 
-        assertFalse(CouchbaseServiceRegistry.isCompatibleWith(
-                Command.create("bar"),
-                CouchbaseServiceRegistry.toCouchbaseObject(untypedRecord)));
+        assertFalse(untypedRecord.isCompatibleWith(Command.create("bar")));
     }
 }
