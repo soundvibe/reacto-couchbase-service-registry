@@ -55,9 +55,6 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
 
     public static final int DEFAULT_HEARTBEAT_INTERVAL_IN_SECONDS = 60;
 
-    public static final String METADATA = "metadata";
-    public static final String STATUS = "status";
-
     private final Supplier<Bucket> bucketSupplier;
     private final ViewQuery viewQuery;
     private final ServiceRecord serviceRecord;
