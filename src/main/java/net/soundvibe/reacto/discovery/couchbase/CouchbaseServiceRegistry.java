@@ -43,7 +43,7 @@ import static java.util.Objects.requireNonNull;
  *
  * @author Linas Naginionis
  */
-public final class CouchbaseServiceRegistry extends AbstractServiceRegistry implements ServiceDiscoveryLifecycle {
+public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
 
     private final static Logger log = LoggerFactory.getLogger(CouchbaseServiceRegistry.class);
 
@@ -54,9 +54,6 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry impl
                     net.soundvibe.reacto.types.json.JsonObject.empty());
 
     public static final int DEFAULT_HEARTBEAT_INTERVAL_IN_SECONDS = 60;
-
-    public static final String METADATA = "metadata";
-    public static final String STATUS = "status";
 
     private final Supplier<Bucket> bucketSupplier;
     private final ViewQuery viewQuery;
