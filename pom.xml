@@ -3,34 +3,47 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-  <groupId>net.soundvibe</groupId>
-  <artifactId>reacto-couchbase-service-registry</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+    <groupId>net.soundvibe</groupId>
+    <artifactId>reacto-couchbase-service-registry</artifactId>
+    <version>1.0.2</version>
 
-  <licenses>
-    <license>
-        <name>The Apache Software License, Version 2.0</name>
-        <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-        <distribution>repo</distribution>
-    </license>
-  </licenses>
+    <name>reacto-couchbase-service-registry</name>
+    <description>reacto service registry implementation based on Couchbase</description>
+    <url>https://github.com/soundvibe/reacto-couchbase-service-registry</url>
 
-  <developers>
-    <developer>
-        <id>linasnaginionis</id>
-        <name>Linas Naginionis</name>
-        <email>lnaginionis@gmail.com</email>
-    </developer>
-  </developers>
 
-  <packaging>jar</packaging>
+    <scm>
+        <connection>scm:git:https://github.com/soundvibe/reacto-couchbase-service-registry.git</connection>
+        <developerConnection>scm:git:https://github.com/soundvibe/reacto-couchbase-service-registry.git
+        </developerConnection>
+        <url>https://github.com/soundvibe/reacto-couchbase-service-registry.git</url>
+        <tag>HEAD</tag>
+    </scm>
 
-  <properties>
-    <java.version>1.8</java.version>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>linasnaginionis</id>
+            <name>Linas Naginionis</name>
+            <email>lnaginionis@gmail.com</email>
+        </developer>
+    </developers>
+
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>1.8</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
 
     <distributionManagement>
         <snapshotRepository>
@@ -44,92 +57,92 @@
     </distributionManagement>
 
 
-  <dependencies>
+    <dependencies>
 
-      <dependency>
-          <groupId>net.soundvibe</groupId>
-          <artifactId>reacto</artifactId>
-          <version>1.0.2</version>
-      </dependency>
+        <dependency>
+            <groupId>net.soundvibe</groupId>
+            <artifactId>reacto</artifactId>
+            <version>1.0.2</version>
+        </dependency>
 
-      <dependency>
-          <groupId>com.couchbase.client</groupId>
-          <artifactId>java-client</artifactId>
-          <version>2.4.1</version>
-      </dependency>
+        <dependency>
+            <groupId>com.couchbase.client</groupId>
+            <artifactId>java-client</artifactId>
+            <version>2.4.1</version>
+        </dependency>
 
-      <dependency>
-          <groupId>junit</groupId>
-          <artifactId>junit</artifactId>
-          <version>4.12</version>
-          <scope>test</scope>
-      </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
 
-  </dependencies>
+    </dependencies>
 
-  <build>
-    
+    <build>
 
-    <plugins>
-        <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <version>3.3</version>
-            <configuration>
-                <source>${java.version}</source>
-                <target>${java.version}</target>
-            </configuration>
-        </plugin>
 
-        <plugin>
-            <artifactId>maven-source-plugin</artifactId>
-            <version>2.4</version>
-            <executions>
-                <execution>
-                    <id>attach-sources</id>
-                    <phase>verify</phase>
-                    <goals>
-                        <goal>jar-no-fork</goal>
-                    </goals>
-                </execution>
-            </executions>
-        </plugin>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.3</version>
+                <configuration>
+                    <source>${java.version}</source>
+                    <target>${java.version}</target>
+                </configuration>
+            </plugin>
 
-        <plugin>
-            <groupId>org.jacoco</groupId>
-            <artifactId>jacoco-maven-plugin</artifactId>
-            <version>0.7.5.201505241946</version>
-            <executions>
-                <execution>
-                    <goals>
-                        <goal>prepare-agent</goal>
-                    </goals>
-                </execution>
-                <execution>
-                    <id>report</id>
-                    <phase>test</phase>
-                    <goals>
-                        <goal>report</goal>
-                    </goals>
-                </execution>
-            </executions>
-        </plugin>
+            <plugin>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>2.4</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
 
-        <plugin>
-            <groupId>org.sonatype.plugins</groupId>
-            <artifactId>nexus-staging-maven-plugin</artifactId>
-            <version>1.6.6</version>
-            <extensions>true</extensions>
-            <configuration>
-                <serverId>ossrh</serverId>
-                <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                <autoReleaseAfterClose>true</autoReleaseAfterClose>
-            </configuration>
-        </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.7.5.201505241946</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
 
-    </plugins>
+            <plugin>
+                <groupId>org.sonatype.plugins</groupId>
+                <artifactId>nexus-staging-maven-plugin</artifactId>
+                <version>1.6.6</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <serverId>ossrh</serverId>
+                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
+                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
+                </configuration>
+            </plugin>
 
-  </build>
+        </plugins>
+
+    </build>
 
     <profiles>
         <profile>
