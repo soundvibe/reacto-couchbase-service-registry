@@ -1,5 +1,6 @@
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/net.soundvibe/reacto-couchbase-service-registry/badge.svg)](https://maven-badges.herokuapp.com/maven-central/net.soundvibe/reacto-couchbase-service-registry)
 [![Build Status](https://travis-ci.org/soundvibe/reacto-couchbase-service-registry.png)](https://travis-ci.org/soundvibe/reacto-couchbase-service-registry)
+[![Coverage Status](https://codecov.io/github/soundvibe/reacto-couchbase-service-registry/coverage.svg?branch=develop)](https://codecov.io/github/soundvibe/reacto-couchbase-service-registry?branch=develop)
 
 # reacto-couchbase-service-registry
 
