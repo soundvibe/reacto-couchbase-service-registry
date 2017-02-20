@@ -155,6 +155,28 @@ public class CouchbaseServiceRegistryTest {
     }
 
     @Test
+    public void shouldRegister() throws Exception {
+        TestSubscriber<Any> testSubscriber = new TestSubscriber<>();
+        sut.register().subscribe(testSubscriber);
+
+        testSubscriber.awaitTerminalEvent();
+        testSubscriber.assertNoErrors();
+        testSubscriber.assertValueCount(1);
+    }
+
+    @Test
+    public void shouldUnregister() throws Exception {
+        shouldRegister();
+
+        TestSubscriber<Any> testSubscriber = new TestSubscriber<>();
+        sut.unregister().subscribe(testSubscriber);
+
+        testSubscriber.awaitTerminalEvent();
+        testSubscriber.assertNoErrors();
+        testSubscriber.assertValueCount(1);
+    }
+
+    @Test
     public void shouldMapToCouchbaseObjectAndBack() throws Exception {
         JsonObject actual = CouchbaseServiceRegistry.toCouchbaseObject(typedRecord);
 
