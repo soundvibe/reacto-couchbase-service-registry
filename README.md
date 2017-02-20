@@ -14,7 +14,7 @@ Binaries and dependency information for Maven, Ivy, Gradle and others can be fou
 Example for Gradle:
 
 ```groovy
-compile 'net.soundvibe:reacto-couchbase-service-registry:x.y.z'
+compile 'net.soundvibe:reacto-couchbase-service-registry:1.0.2'
 ```
 
 and for Maven:
@@ -23,7 +23,7 @@ and for Maven:
 <dependency>
     <groupId>net.soundvibe</groupId>
     <artifactId>reacto-couchbase-service-registry</artifactId>
-    <version>x.y.z</version>
+    <version>1.0.2</version>
 </dependency>
 ```
 
