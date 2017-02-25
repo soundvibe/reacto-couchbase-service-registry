@@ -107,15 +107,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
             "}";
 
     public Observable<DesignDocument> updateDefaultView(String designDocument, String viewName) {
-        return bucketSupplier.get().bucketManager().async()
-                .getDesignDocument(designDocument)
-                .doOnNext(doc -> doc.views()
-                        .replaceAll(view -> viewName.equals(view.name()) ? DefaultView.create(view.name(), viewMapFunction) : view))
-                .flatMap(doc -> bucketSupplier.get().bucketManager().async().upsertDesignDocument(doc))
-                .switchIfEmpty(Observable.defer(() -> bucketSupplier.get().bucketManager().async()
-                        .insertDesignDocument(DesignDocument.create(designDocument, singletonList(DefaultView.create(viewName, viewMapFunction))))
-                ))
-                .flatMap(doc -> bucketSupplier.get().bucketManager().async().publishDesignDocument(designDocument, true));
+        return Observable.just(DesignDocument.create(designDocument, singletonList(DefaultView.create(viewName, viewMapFunction))))
+                .flatMap(doc -> bucketSupplier.get().bucketManager().async().upsertDesignDocument(doc));
     }
 
     public Observable<ServiceRecord> findRecords() {

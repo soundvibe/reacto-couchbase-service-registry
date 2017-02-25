@@ -1,5 +1,6 @@
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/net.soundvibe/reacto-couchbase-service-registry/badge.svg)](https://maven-badges.herokuapp.com/maven-central/net.soundvibe/reacto-couchbase-service-registry)
 [![Build Status](https://travis-ci.org/soundvibe/reacto-couchbase-service-registry.png)](https://travis-ci.org/soundvibe/reacto-couchbase-service-registry)
+[![Coverage Status](https://codecov.io/github/soundvibe/reacto-couchbase-service-registry/coverage.svg?branch=develop)](https://codecov.io/github/soundvibe/reacto-couchbase-service-registry?branch=develop)
 
 # reacto-couchbase-service-registry
 
@@ -13,7 +14,7 @@ Binaries and dependency information for Maven, Ivy, Gradle and others can be fou
 Example for Gradle:
 
 ```groovy
-compile 'net.soundvibe:reacto-couchbase-service-registry:x.y.z'
+compile 'net.soundvibe:reacto-couchbase-service-registry:1.0.3'
 ```
 
 and for Maven:
@@ -22,7 +23,7 @@ and for Maven:
 <dependency>
     <groupId>net.soundvibe</groupId>
     <artifactId>reacto-couchbase-service-registry</artifactId>
-    <version>x.y.z</version>
+    <version>1.0.3</version>
 </dependency>
 ```
 
