@@ -171,6 +171,9 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
     public Observable<Any> update() {
         return bucketSupplier.get().async()
                 .touch(serviceRecord.registrationId, ttl())
+                .onErrorResumeNext(error -> error instanceof DocumentDoesNotExistException ?
+                        publish().map(any -> true) :
+                        Observable.error(error))
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .filter(wasUpdated -> wasUpdated)
                 .map(__ -> Any.VOID)
