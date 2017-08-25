@@ -21,8 +21,10 @@ import com.couchbase.client.java.document.*;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.couchbase.client.java.error.*;
 import com.couchbase.client.java.view.*;
-import net.soundvibe.reacto.client.events.EventHandlerRegistry;
-import net.soundvibe.reacto.discovery.*;
+import hu.akarnokd.rxjava.interop.RxJavaInterop;
+import io.reactivex.Flowable;
+import net.soundvibe.reacto.client.events.CommandHandlerRegistry;
+import net.soundvibe.reacto.discovery.AbstractServiceRegistry;
 import net.soundvibe.reacto.discovery.types.*;
 import net.soundvibe.reacto.mappers.ServiceRegistryMapper;
 import net.soundvibe.reacto.types.*;
@@ -65,7 +67,7 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
 
     public CouchbaseServiceRegistry(
             Supplier<Bucket> bucketSupplier,
-            EventHandlerRegistry eventHandlerRegistry,
+            CommandHandlerRegistry eventHandlerRegistry,
             ServiceRegistryMapper mapper,
             ServiceRecord serviceRecord) {
         this(bucketSupplier,
@@ -79,7 +81,7 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
     public CouchbaseServiceRegistry(
             Supplier<Bucket> bucketSupplier,
             ViewQuery viewQuery,
-            EventHandlerRegistry eventHandlerRegistry,
+            CommandHandlerRegistry eventHandlerRegistry,
             ServiceRegistryMapper mapper,
             ServiceRecord serviceRecord,
             int heartBeatIntervalInSeconds) {
@@ -106,26 +108,29 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
             "  }\n" +
             "}";
 
-    public Observable<DesignDocument> updateDefaultView(String designDocument, String viewName) {
-        return Observable.just(DesignDocument.create(designDocument, singletonList(DefaultView.create(viewName, viewMapFunction))))
-                .flatMap(doc -> bucketSupplier.get().bucketManager().async().upsertDesignDocument(doc));
+    public Flowable<DesignDocument> updateDefaultView(String designDocument, String viewName) {
+        return Flowable.just(DesignDocument.create(
+                designDocument, singletonList(DefaultView.create(viewName, viewMapFunction))))
+                .flatMap(doc -> RxJavaInterop.toV2Flowable(
+                        bucketSupplier.get().bucketManager().async().upsertDesignDocument(doc)));
     }
 
-    public Observable<ServiceRecord> findRecords() {
-        return bucketSupplier.get().async()
+    public Flowable<ServiceRecord> findRecords() {
+        return RxJavaInterop.toV2Flowable(bucketSupplier.get().async()
                 .query(viewQuery)
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .flatMap(AsyncViewResult::rows)
                 .flatMap(AsyncViewRow::document)
                 .map(AbstractDocument::content)
-                .map(CouchbaseServiceRegistry::toRecord);
+                .map(CouchbaseServiceRegistry::toRecord));
     }
 
     @Override
-    protected Observable<List<ServiceRecord>> findRecordsOf(Command command) {
+    protected Flowable<List<ServiceRecord>> findRecordsOf(Command command) {
         return findRecords()
                 .filter(serviceRecord -> serviceRecord.isCompatibleWith(command))
                 .toList()
+                .toFlowable()
                 .defaultIfEmpty(emptyList());
     }
 
@@ -140,8 +145,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
         return ServiceRecord.fromJson(jsonObject.toString());
     }
 
-    public Observable<Any> unpublish(ServiceRecord serviceRecord) {
-        return bucketSupplier.get().async()
+    public Flowable<Any> unpublish(ServiceRecord serviceRecord) {
+        return RxJavaInterop.toV2Flowable(bucketSupplier.get().async()
                 .remove(serviceRecord.registrationId, PersistTo.NONE, ReplicateTo.NONE)
                 .flatMap(jsonDocument -> bucketSupplier.get().async()
                         .query(ViewQuery.from(viewQuery.getDesign(), viewQuery.getView()).stale(Stale.FALSE).limit(1))
@@ -150,11 +155,11 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .filter(wasRefreshed -> wasRefreshed)
                 .map(__ -> Any.VOID)
-                .switchIfEmpty(Observable.error(new IllegalStateException("Service record was not unpublished")));
+                .switchIfEmpty(Observable.error(new IllegalStateException("Service record was not unpublished"))));
     }
 
-    public Observable<Any> publish() {
-        return bucketSupplier.get().async()
+    public Flowable<Any> publish() {
+        return RxJavaInterop.toV2Flowable(bucketSupplier.get().async()
                 .upsert(JsonDocument.create(serviceRecord.registrationId, ttl(), serviceObject),
                         PersistTo.NONE, ReplicateTo.NONE)
                 .flatMap(jsonDocument -> bucketSupplier.get().async()
@@ -164,20 +169,20 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .filter(wasAdded -> wasAdded)
                 .map(__ -> Any.VOID)
-                .switchIfEmpty(Observable.error(new IllegalStateException("Service record was not published")))
+                .switchIfEmpty(Observable.error(new IllegalStateException("Service record was not published"))))
                 ;
     }
 
-    public Observable<Any> update() {
-        return bucketSupplier.get().async()
-                .touch(serviceRecord.registrationId, ttl())
-                .onErrorResumeNext(error -> error instanceof DocumentDoesNotExistException ?
+    public Flowable<Any> update() {
+        return RxJavaInterop.toV2Flowable(bucketSupplier.get().async()
+                .touch(serviceRecord.registrationId, ttl()))
+                .onErrorResumeNext((Throwable error) -> error instanceof DocumentDoesNotExistException ?
                         publish().map(any -> true) :
-                        Observable.error(error))
+                        Flowable.error(error))
                 .retry(CouchbaseServiceRegistry::RETRY_DEFAULT)
                 .filter(wasUpdated -> wasUpdated)
                 .map(__ -> Any.VOID)
-                .switchIfEmpty(Observable.error(new IllegalStateException("Service record was not updated")))
+                .switchIfEmpty(Flowable.error(new IllegalStateException("Service record was not updated")))
                 ;
     }
 
@@ -187,7 +192,7 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
 
     private void startHeartBeat() {
         timer.set(Scheduler.scheduleAtFixedInterval(TimeUnit.SECONDS.toMillis(heartBeatIntervalInSeconds),
-                () -> Observable.just(serviceRecord)
+                () -> Flowable.just(serviceRecord)
                         .filter(rec -> isOpen.get())
                         .flatMap(rec -> update())
                         .subscribe(any -> log.info("Service was updated successfully"),
@@ -196,8 +201,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
     }
 
     @Override
-    public Observable<Any> register() {
-        return Observable.just(serviceRecord)
+    public Flowable<Any> register() {
+        return Flowable.just(serviceRecord)
                 .filter(rec -> !rec.equals(DEFAULT_SERVICE_RECORD))
                 .filter(rec -> !isOpen.get())
                 .flatMap(rec -> publish())
@@ -214,8 +219,8 @@ public final class CouchbaseServiceRegistry extends AbstractServiceRegistry {
     }
 
     @Override
-    public Observable<Any> unregister() {
-        return Observable.just(serviceRecord)
+    public Flowable<Any> unregister() {
+        return Flowable.just(serviceRecord)
                 .filter(rec -> !rec.equals(DEFAULT_SERVICE_RECORD))
                 .filter(rec -> isOpen.get())
                 .doOnNext(rec -> timer.get().cancel())

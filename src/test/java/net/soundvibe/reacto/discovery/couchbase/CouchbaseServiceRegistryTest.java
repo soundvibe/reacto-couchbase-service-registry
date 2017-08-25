@@ -5,14 +5,14 @@ import com.couchbase.client.java.bucket.BucketType;
 import com.couchbase.client.java.cluster.DefaultBucketSettings;
 import com.couchbase.client.java.document.json.*;
 import com.couchbase.client.java.view.*;
-import net.soundvibe.reacto.client.events.EventHandlerRegistry;
+import io.reactivex.Flowable;
+import io.reactivex.subscribers.TestSubscriber;
+import net.soundvibe.reacto.client.events.CommandHandlerRegistry;
 import net.soundvibe.reacto.discovery.types.ServiceRecord;
 import net.soundvibe.reacto.mappers.jackson.JacksonMapper;
 import net.soundvibe.reacto.server.*;
 import net.soundvibe.reacto.types.*;
 import org.junit.*;
-import rx.Observable;
-import rx.observers.TestSubscriber;
 
 import java.util.*;
 
@@ -26,11 +26,11 @@ public class CouchbaseServiceRegistryTest {
     public static final String DEFAULT_BUCKET = "default";
     private final ServiceRecord typedRecord = ServiceRecord.createWebSocketEndpoint(
             new ServiceOptions("service", "/", "1", false, 8181),
-            CommandRegistry.ofTyped(String.class, String.class, Observable::just, new JacksonMapper(JacksonMapper.JSON)));
+            CommandRegistry.ofTyped(String.class, String.class, Flowable::just, new JacksonMapper(JacksonMapper.JSON)));
 
     private final ServiceRecord untypedRecord = ServiceRecord.createWebSocketEndpoint(
             new ServiceOptions("service", "/", "1", false, 8181),
-            CommandRegistry.of("foo", command -> Observable.just(Event.create("bar"))));
+            CommandRegistry.of("foo", command -> Flowable.just(Event.create("bar"))));
 
 
     public static CouchbaseContainer couchbase =
@@ -62,7 +62,7 @@ public class CouchbaseServiceRegistryTest {
         cluster = couchbase.getCouchbaseCluster();
         System.out.println("Creating default view...");
         getCouchbaseServiceRegistry().updateDefaultView(viewQuery.getDesign(), viewQuery.getView())
-                .toBlocking().subscribe();
+                .blockingSubscribe();
     }
 
     private static CouchbaseCluster cluster;
@@ -74,7 +74,7 @@ public class CouchbaseServiceRegistryTest {
     private final static ServiceRecord serviceRecord = ServiceRecord.createWebSocketEndpoint(
             new ServiceOptions("couchbase-test", "/", "1",
                     false, 8181),
-            CommandRegistry.of("MakeDemo", command -> Observable.just(Event.create("Made"))));
+            CommandRegistry.of("MakeDemo", command -> Flowable.just(Event.create("Made"))));
 
     @After
     @Before
@@ -101,7 +101,7 @@ public class CouchbaseServiceRegistryTest {
         sut.findRecords().subscribe(subscriber);
         subscriber.awaitTerminalEvent();
         subscriber.assertNoErrors();
-        subscriber.assertCompleted();
+        subscriber.assertComplete();
         subscriber.assertValue(serviceRecord);
 
         TestSubscriber<List<ServiceRecord>> servicesSubscriber = new TestSubscriber<>();
@@ -117,7 +117,7 @@ public class CouchbaseServiceRegistryTest {
         sut.findRecords().subscribe(subscriber);
         subscriber.awaitTerminalEvent();
         subscriber.assertNoErrors();
-        subscriber.assertCompleted();
+        subscriber.assertComplete();
         subscriber.assertNoValues();
     }
 
@@ -203,7 +203,7 @@ public class CouchbaseServiceRegistryTest {
 
     private static CouchbaseServiceRegistry getCouchbaseServiceRegistry() {
         return new CouchbaseServiceRegistry(
-                () -> cluster.openBucket(DEFAULT_BUCKET, DEFAULT_BUCKET), viewQuery, EventHandlerRegistry.empty(),
+                () -> cluster.openBucket(DEFAULT_BUCKET, DEFAULT_BUCKET), viewQuery, CommandHandlerRegistry.empty(),
                 new JacksonMapper(JacksonMapper.JSON),
                 serviceRecord, 15);
     }
